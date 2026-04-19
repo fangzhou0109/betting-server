@@ -1,0 +1,9 @@
+node_modules/
+dist/
+mysql-data/
+.env
+*.log
+.DS_Store
+admin/
+web/
+betting-system
