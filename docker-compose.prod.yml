@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: betting-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+
+  redis:
+    image: redis:7-alpine
+    container_name: betting-redis
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  node:
+    build: .
+    container_name: betting-node
+    restart: always
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PORT: 3000
+      ODDS_API_KEY: ${ODDS_API_KEY}
+      ODDS_SYNC_INTERVAL: ${ODDS_SYNC_INTERVAL:-300000}
+      ODDS_SPORTS: ${ODDS_SPORTS:-soccer_epl,basketball_nba,soccer_uefa_champs_league}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    depends_on:
+      - mysql
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: betting-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - node
+
+volumes:
+  mysql-data:
+  caddy-data:
+  caddy-config:

@@ -12,6 +12,19 @@ import { syncOdds, syncScores, startSyncTimer } from './services/sync';
 const app = express();
 app.use(express.json());
 
+// CORS
+const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && (allowedOrigins.includes(origin) || allowedOrigins.length === 0)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  }
+  if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
+  next();
+});
+
 // 健康检查
 app.get('/', async (_req: Request, res: Response) => {
   try {
