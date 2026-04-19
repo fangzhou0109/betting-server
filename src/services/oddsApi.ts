@@ -46,7 +46,12 @@ export interface Sport {
   active: boolean;
 }
 
+let quotaPaused = false;
+
 async function apiFetch<T>(path: string): Promise<T> {
+  if (quotaPaused) {
+    throw new Error('Quota too low, sync paused until next month');
+  }
   const url = `${BASE_URL}${path}${path.includes('?') ? '&' : '?'}apiKey=${config.ODDS_API_KEY}`;
   const res = await fetch(url);
   if (!res.ok) {
@@ -55,7 +60,12 @@ async function apiFetch<T>(path: string): Promise<T> {
   }
   const remaining = res.headers.get('x-requests-remaining');
   if (remaining) {
-    console.log(`[OddsAPI] Quota remaining: ${remaining}`);
+    const left = parseInt(remaining);
+    console.log(`[OddsAPI] Quota remaining: ${left}`);
+    if (left < 30) {
+      console.warn(`[OddsAPI] Quota critically low (${left}), pausing sync`);
+      quotaPaused = true;
+    }
   }
   return res.json() as Promise<T>;
 }

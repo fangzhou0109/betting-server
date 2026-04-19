@@ -9,8 +9,8 @@ const {
   BET_MIN = '1',
   BET_MAX = '100000',
   ODDS_API_KEY = '',
-  ODDS_SYNC_INTERVAL = '300000',
-  ODDS_SPORTS = 'soccer_epl,basketball_nba,soccer_uefa_champs_league,americanfootball_nfl,baseball_mlb',
+  ODDS_SYNC_INTERVAL = '10800000',
+  ODDS_SPORTS = 'soccer_epl,basketball_nba',
 } = process.env;
 
 export default {

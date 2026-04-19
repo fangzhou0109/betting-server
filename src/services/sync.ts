@@ -45,10 +45,14 @@ export async function syncOdds(): Promise<{ synced: number; errors: string[] }> 
         }
       }
     } catch (e: any) {
+      console.error(`[Sync] Error for ${sportKey}: ${e.message}`);
       errors.push(`${sportKey}: ${e.message}`);
     }
   }
 
+  if (errors.length > 0) {
+    console.log(`[Sync] Errors detail:`, errors);
+  }
   console.log(`[Sync] Done. Synced: ${totalSynced}, Errors: ${errors.length}`);
   return { synced: totalSynced, errors };
 }
