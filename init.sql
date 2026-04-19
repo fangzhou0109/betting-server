@@ -74,3 +74,13 @@ CREATE TABLE IF NOT EXISTS admin_logs (
   INDEX idx_action (action),
   INDEX idx_created (created_at)
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(32) NOT NULL UNIQUE,
+  password VARCHAR(200) NOT NULL,
+  role ENUM('super','admin','viewer') NOT NULL DEFAULT 'admin',
+  status TINYINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
