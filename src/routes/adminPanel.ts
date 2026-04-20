@@ -281,7 +281,7 @@ router.get('/bets', async (req: AdminRequest, res: Response): Promise<void> => {
     const [rows] = await db.query<RowDataPacket[]>(
       `SELECT b.id, b.user_id, u.username, b.match_id, m.name as match_name,
               m.home_team, m.away_team, m.sport_key,
-              o.label as odds_label, b.amount, b.odds_value, b.status, b.payout, b.created_at
+              o.label as odds_label, o.market, b.amount, b.odds_value, b.status, b.payout, b.created_at
        FROM bets b
        JOIN users u ON b.user_id = u.id
        JOIN matches m ON b.match_id = m.id
@@ -327,7 +327,7 @@ router.get('/matches', async (req: AdminRequest, res: Response): Promise<void> =
       `SELECT m.*,
         (SELECT COUNT(*) FROM bets WHERE match_id = m.id) as betCount,
         (SELECT COALESCE(SUM(amount),0) FROM bets WHERE match_id = m.id) as betAmount,
-        JSON_ARRAYAGG(JSON_OBJECT('id', o.id, 'label', o.label, 'value', o.value, 'status', o.status)) as odds
+        JSON_ARRAYAGG(JSON_OBJECT('id', o.id, 'label', o.label, 'value', o.value, 'status', o.status, 'market', o.market, 'point', o.point)) as odds
        FROM matches m LEFT JOIN odds o ON m.id = o.match_id
        WHERE ${where}
        GROUP BY m.id ORDER BY m.start_time DESC LIMIT ? OFFSET ?`,

@@ -5,6 +5,7 @@ const BASE_URL = 'https://api.the-odds-api.com/v4';
 interface Outcome {
   name: string;
   price: number;
+  point?: number;
 }
 
 interface Market {
@@ -76,7 +77,7 @@ export async function getSports(): Promise<Sport[]> {
 
 export async function getOdds(sportKey: string): Promise<OddsEvent[]> {
   return apiFetch<OddsEvent[]>(
-    `/sports/${sportKey}/odds?regions=eu,uk&markets=h2h&oddsFormat=decimal`
+    `/sports/${sportKey}/odds?regions=eu,uk&markets=h2h,spreads,totals&oddsFormat=decimal`
   );
 }
 

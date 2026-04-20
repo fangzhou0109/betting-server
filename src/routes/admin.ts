@@ -148,26 +148,70 @@ export async function autoSettle(matchId: number, winningOddsId: number): Promis
     );
 
     const [bets] = await conn.query<RowDataPacket[]>(
-      "SELECT id, user_id, amount, odds_value, odds_id FROM bets WHERE match_id = ? AND status = 'pending'",
+      "SELECT id, user_id, amount, odds_value, odds_id, parlay_id FROM bets WHERE match_id = ? AND status = 'pending'",
       [matchId]
     );
 
+    const affectedParlayIds = new Set<number>();
+
     for (const bet of bets) {
       if (bet.odds_id === winningOddsId) {
-        const payout = bet.amount * bet.odds_value;
-        const [users] = await conn.query<RowDataPacket[]>(
-          'SELECT balance FROM users WHERE id = ? FOR UPDATE',
-          [bet.user_id]
-        );
-        const newBalance = users[0].balance + payout;
-        await conn.query('UPDATE users SET balance = ? WHERE id = ?', [newBalance, bet.user_id]);
-        await conn.query("UPDATE bets SET status = 'won', payout = ? WHERE id = ?", [payout, bet.id]);
-        await conn.query(
-          "INSERT INTO transactions (user_id, type, amount, balance_after) VALUES (?, 'payout', ?, ?)",
-          [bet.user_id, payout, newBalance]
-        );
+        if (bet.parlay_id) {
+          // 串关腿赢了，先标记 won 但不派奖（等整个串关结算）
+          await conn.query("UPDATE bets SET status = 'won' WHERE id = ?", [bet.id]);
+          affectedParlayIds.add(bet.parlay_id);
+        } else {
+          const payout = bet.amount * bet.odds_value;
+          const [users] = await conn.query<RowDataPacket[]>(
+            'SELECT balance FROM users WHERE id = ? FOR UPDATE',
+            [bet.user_id]
+          );
+          const newBalance = users[0].balance + payout;
+          await conn.query('UPDATE users SET balance = ? WHERE id = ?', [newBalance, bet.user_id]);
+          await conn.query("UPDATE bets SET status = 'won', payout = ? WHERE id = ?", [payout, bet.id]);
+          await conn.query(
+            "INSERT INTO transactions (user_id, type, amount, balance_after) VALUES (?, 'payout', ?, ?)",
+            [bet.user_id, payout, newBalance]
+          );
+        }
       } else {
         await conn.query("UPDATE bets SET status = 'lost', payout = 0 WHERE id = ?", [bet.id]);
+        if (bet.parlay_id) affectedParlayIds.add(bet.parlay_id);
+      }
+    }
+
+    // 串关结算
+    for (const parlayId of affectedParlayIds) {
+      const [legs] = await conn.query<RowDataPacket[]>(
+        "SELECT status FROM bets WHERE parlay_id = ?",
+        [parlayId]
+      );
+      const allSettled = legs.every((l: any) => l.status === 'won' || l.status === 'lost');
+      if (!allSettled) continue; // 还有未结算的腿
+
+      const anyLost = legs.some((l: any) => l.status === 'lost');
+      const [parlayRows] = await conn.query<RowDataPacket[]>(
+        "SELECT id, user_id, amount, total_odds, status FROM parlays WHERE id = ? FOR UPDATE",
+        [parlayId]
+      );
+      const parlay = parlayRows[0];
+      if (!parlay || parlay.status !== 'pending') continue;
+
+      if (anyLost) {
+        await conn.query("UPDATE parlays SET status = 'lost', payout = 0 WHERE id = ?", [parlayId]);
+      } else {
+        const payout = Math.round(parlay.amount * parlay.total_odds * 100) / 100;
+        const [users] = await conn.query<RowDataPacket[]>(
+          'SELECT balance FROM users WHERE id = ? FOR UPDATE',
+          [parlay.user_id]
+        );
+        const newBalance = users[0].balance + payout;
+        await conn.query('UPDATE users SET balance = ? WHERE id = ?', [newBalance, parlay.user_id]);
+        await conn.query("UPDATE parlays SET status = 'won', payout = ? WHERE id = ?", [payout, parlayId]);
+        await conn.query(
+          "INSERT INTO transactions (user_id, type, amount, balance_after) VALUES (?, 'payout', ?, ?)",
+          [parlay.user_id, payout, newBalance]
+        );
       }
     }
 

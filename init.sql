@@ -29,11 +29,14 @@ CREATE TABLE IF NOT EXISTS matches (
 CREATE TABLE IF NOT EXISTS odds (
   id INT AUTO_INCREMENT PRIMARY KEY,
   match_id INT NOT NULL,
+  market VARCHAR(20) NOT NULL DEFAULT 'h2h',
   label VARCHAR(50) NOT NULL,
+  point DECIMAL(6,1) DEFAULT NULL,
   value DECIMAL(8,2) NOT NULL,
   status ENUM('open', 'closed') NOT NULL DEFAULT 'open',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (match_id) REFERENCES matches(id)
+  FOREIGN KEY (match_id) REFERENCES matches(id),
+  INDEX idx_market (match_id, market)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS bets (
@@ -45,10 +48,23 @@ CREATE TABLE IF NOT EXISTS bets (
   odds_value DECIMAL(8,2) NOT NULL,
   status ENUM('pending', 'won', 'lost') NOT NULL DEFAULT 'pending',
   payout DECIMAL(12,2) DEFAULT NULL,
+  parlay_id INT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id),
   FOREIGN KEY (match_id) REFERENCES matches(id),
-  FOREIGN KEY (odds_id) REFERENCES odds(id)
+  FOREIGN KEY (odds_id) REFERENCES odds(id),
+  INDEX idx_parlay (parlay_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS parlays (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  total_odds DECIMAL(12,2) NOT NULL,
+  status ENUM('pending', 'won', 'lost') NOT NULL DEFAULT 'pending',
+  payout DECIMAL(12,2) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS transactions (

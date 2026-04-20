@@ -3,16 +3,54 @@ import config from '../config';
 import { getOdds, getScores, OddsEvent } from './oddsApi';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
-function averagePrice(event: OddsEvent, outcomeName: string): number {
+function averagePrice(event: OddsEvent, marketKey: string, outcomeName: string): number {
   const prices: number[] = [];
   for (const bk of event.bookmakers) {
-    const h2h = bk.markets.find(m => m.key === 'h2h');
-    if (!h2h) continue;
-    const outcome = h2h.outcomes.find(o => o.name === outcomeName);
+    const mkt = bk.markets.find(m => m.key === marketKey);
+    if (!mkt) continue;
+    const outcome = mkt.outcomes.find(o => o.name === outcomeName);
     if (outcome) prices.push(outcome.price);
   }
   if (prices.length === 0) return 2.0;
   return Math.round((prices.reduce((a, b) => a + b, 0) / prices.length) * 100) / 100;
+}
+
+function averagePoint(event: OddsEvent, marketKey: string, outcomeName: string): number | null {
+  const points: number[] = [];
+  for (const bk of event.bookmakers) {
+    const mkt = bk.markets.find(m => m.key === marketKey);
+    if (!mkt) continue;
+    const outcome = mkt.outcomes.find(o => o.name === outcomeName);
+    if (outcome?.point != null) points.push(outcome.point);
+  }
+  if (points.length === 0) return null;
+  return Math.round((points.reduce((a, b) => a + b, 0) / points.length) * 10) / 10;
+}
+
+interface MarketOutcome { market: string; label: string; point: number | null; price: number }
+
+function collectMarketOutcomes(event: OddsEvent): MarketOutcome[] {
+  const results: MarketOutcome[] = [];
+  const marketKeys = ['h2h', 'spreads', 'totals'];
+
+  for (const marketKey of marketKeys) {
+    // Collect unique outcome names for this market
+    const outcomeNames = new Set<string>();
+    for (const bk of event.bookmakers) {
+      const mkt = bk.markets.find(m => m.key === marketKey);
+      if (!mkt) continue;
+      mkt.outcomes.forEach(o => outcomeNames.add(o.name));
+    }
+    for (const name of outcomeNames) {
+      results.push({
+        market: marketKey,
+        label: name,
+        point: averagePoint(event, marketKey, name),
+        price: averagePrice(event, marketKey, name),
+      });
+    }
+  }
+  return results;
 }
 
 function getOutcomeLabels(event: OddsEvent): string[] {
@@ -89,14 +127,24 @@ async function upsertEvent(event: OddsEvent): Promise<void> {
        matchId]
     );
 
-    // Update odds values
-    const labels = getOutcomeLabels(event);
-    for (const label of labels) {
-      const avgPrice = averagePrice(event, label);
-      await db.query(
-        `UPDATE odds SET value = ? WHERE match_id = ? AND label = ? AND status = 'open'`,
-        [avgPrice, matchId, label]
+    // Update or insert odds for all markets
+    const outcomes = collectMarketOutcomes(event);
+    for (const oc of outcomes) {
+      const [existingOdds] = await db.query<RowDataPacket[]>(
+        `SELECT id FROM odds WHERE match_id = ? AND market = ? AND label = ? AND (point IS NULL AND ? IS NULL OR point = ?)`,
+        [matchId, oc.market, oc.label, oc.point, oc.point]
       );
+      if (existingOdds.length > 0) {
+        await db.query(
+          `UPDATE odds SET value = ?, point = ? WHERE id = ? AND status = 'open'`,
+          [oc.price, oc.point, existingOdds[0].id]
+        );
+      } else {
+        await db.query(
+          `INSERT INTO odds (match_id, market, label, point, value, status) VALUES (?, ?, ?, ?, ?, 'open')`,
+          [matchId, oc.market, oc.label, oc.point, oc.price]
+        );
+      }
     }
   } else {
     // Insert new match
@@ -109,13 +157,12 @@ async function upsertEvent(event: OddsEvent): Promise<void> {
     );
     matchId = result.insertId;
 
-    // Insert odds
-    const labels = getOutcomeLabels(event);
-    for (const label of labels) {
-      const avgPrice = averagePrice(event, label);
+    // Insert odds for all markets
+    const outcomes = collectMarketOutcomes(event);
+    for (const oc of outcomes) {
       await db.query(
-        `INSERT INTO odds (match_id, label, value, status) VALUES (?, ?, ?, 'open')`,
-        [matchId, label, avgPrice]
+        `INSERT INTO odds (match_id, market, label, point, value, status) VALUES (?, ?, ?, ?, ?, 'open')`,
+        [matchId, oc.market, oc.label, oc.point, oc.price]
       );
     }
   }

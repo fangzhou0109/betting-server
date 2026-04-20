@@ -10,7 +10,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const sport = req.query.sport as string | undefined;
     let sql = `SELECT m.id, m.name, m.home_team, m.away_team, m.sport_key, m.sport_title,
                       m.start_time, m.status, m.source,
-              JSON_ARRAYAGG(JSON_OBJECT('id', o.id, 'label', o.label, 'value', o.value, 'status', o.status)) as odds
+              JSON_ARRAYAGG(JSON_OBJECT('id', o.id, 'market', o.market, 'label', o.label, 'point', o.point, 'value', o.value, 'status', o.status)) as odds
        FROM matches m
        LEFT JOIN odds o ON m.id = o.match_id`;
     const params: string[] = [];
